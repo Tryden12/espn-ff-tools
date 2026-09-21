@@ -118,6 +118,81 @@ matchup that week (same scale as above). The optimizer's ranking is still
 driven entirely by ESPN's projected points — OPRK is shown for context, e.g.
 to help you decide between two close options, not blended into the math.
 
+### Trade recommendations
+
+Analyzes your team's positional strength against the rest of the league and
+suggests trades, handcuff chips, and buy-low/sell-high targets.
+
+```bash
+npm run trades
+```
+
+Options:
+
+```bash
+node src/scripts/tradeRecommendations.js --week=4 --team=nifty
+```
+
+- `--week` — scoring period to evaluate (defaults to the current week).
+- `--team` — which team's detailed position-strength breakdown to show
+  (defaults to yours). Accepts a team id or a case-insensitive substring of
+  the team name, e.g. `--team=nifty` for "Neylan's Nifty Team". Useful for
+  scouting a specific trade partner before reaching out. The suggested
+  trades, handcuff chips, and buy-low/sell-high sections always stay
+  anchored to your own team, since those are actionable recommendations
+  for you.
+
+What it shows:
+
+- **League Position Strength** ([src/positionStrength.js](src/positionStrength.js))
+  — every team's rank at each of QB/RB/WR/TE (K/D-ST excluded — rarely
+  trade currency), in one grid, color-coded like OPRK. A team's "starter
+  value" at a position is the season-per-game average across its best
+  players there, up to the league's actual starting slot count for that
+  position; anyone beyond that is "surplus" — tradeable depth not needed to
+  fill the starting lineup. Below the grid, a detail table breaks down any
+  one team's starters/surplus per position — defaults to yours, switch it
+  with the team selector to scout a potential trade partner.
+- **Suggested Trades** ([src/tradeFinder.js](src/tradeFinder.js)) — offers
+  your best surplus player at a strong position for another team's best
+  surplus player at one of your weak positions, but only when it's a real
+  upgrade over what you're currently starting there. Two tiers: **mutual
+  need** (they're also weak where you're strong — likely to say yes) and
+  **upgrade only** (they have the depth to spare it, but may not want your
+  side as much). With a small league, requiring both sides' needs to align
+  is often too strict to find anything, hence the second, less-certain
+  tier.
+- **Handcuff Trade Chips** ([src/handcuffs.js](src/handcuffs.js)) — RBs on
+  your roster that are a clear backup (not just a committee partner — the
+  starter has to be meaningfully better ranked) to a starter owned by
+  another team. Scoped to RB only: a team's WR2 already gets real usage
+  regardless of WR1's health, so it doesn't carry the same all-or-nothing
+  insurance value a true RB handcuff does. Since ESPN doesn't expose real
+  depth charts, "backup" is approximated with preseason average draft rank,
+  same technique as the waiver page's opportunity signal
+  ([src/depthChart.js](src/depthChart.js)).
+- **Sell High / Buy Low** ([src/valueGaps.js](src/valueGaps.js)) — compares
+  each player's preseason draft rank against their current-season rank by
+  per-game average, within their position. A player ranking much better now
+  than their preseason slot is a sell-high candidate (their trade value is
+  probably ahead of their long-run talent level); much worse is a buy-low
+  candidate on another team's roster.
+- **Watch List — Possible Future Buy Low's**
+  ([src/scheduleWatch.js](src/scheduleWatch.js)) — looks 3 weeks ahead using
+  OPRK. Two lists: top players elsewhere in the league (top 20 RB/WR, top 10
+  QB, top 5 TE by season average) heading into 2+ matchups against a top-10
+  defense — their current owner probably hasn't priced that in yet, so
+  watch for a buy-low window to open before it shows up in their actual
+  production; and a cross-reference of the existing Buy Low list against
+  players whose schedule is about to get easier — a much stronger signal
+  than either fact alone.
+
+All of this is driven by season-per-game averages, which are genuinely
+noisy this early in a season — one big game can swing a position's
+"strength" or a player's "gap" a lot. Treat it as a starting point for your
+own judgment, not a final answer, and it gets more reliable as more games
+are played.
+
 ## Web UI
 
 A local web UI ([src/web](src/web)) wraps the same underlying modules the
@@ -134,6 +209,7 @@ Then open http://localhost:3000. The home page links to:
   `startsit`, with a week selector.
 - **Waiver Wire Recommendations** — the same ranked free-agent list as
   `waivers`, with filters for position, sort, week, and limit.
-- **Trade Recommendations** — placeholder for a future feature.
+- **Trade Recommendations** — the same analysis as `trades`, with a week
+  selector.
 
 Set `PORT` in `.env` to run on a different port than the default 3000.

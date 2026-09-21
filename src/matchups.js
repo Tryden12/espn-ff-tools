@@ -72,4 +72,32 @@ async function loadMatchupLookup({ seasonId, scoringPeriodId }) {
   };
 }
 
-module.exports = { getProTeamSchedule, getPositionalRatings, loadMatchupLookup };
+// Same as loadMatchupLookup, but across several weeks at once — the
+// schedule is season-wide so it's fetched once, while positional ratings
+// (which change week to week as more games are played) are fetched per
+// week in parallel. Used for "what does this player's next few weeks look
+// like" schedule-strength analysis.
+async function loadMultiWeekMatchupLookup({ seasonId, scoringPeriodIds }) {
+  const [schedule, ratingsEntries] = await Promise.all([
+    getProTeamSchedule(seasonId),
+    Promise.all(
+      scoringPeriodIds.map(async (scoringPeriodId) => [
+        scoringPeriodId,
+        await getPositionalRatings({ seasonId, scoringPeriodId })
+      ])
+    )
+  ]);
+  const ratingsByWeek = new Map(ratingsEntries);
+
+  return function getOpponentRanksForWeeks({ proTeamId, positionId, weeks }) {
+    return weeks.map((week) => {
+      const opponentId = schedule.get(proTeamId)?.get(week);
+      if (opponentId === undefined) return { week, rank: null, opponentProTeamId: null };
+
+      const rating = ratingsByWeek.get(week)?.get(positionId)?.get(opponentId);
+      return { week, rank: rating?.rank ?? null, opponentProTeamId: opponentId };
+    });
+  };
+}
+
+module.exports = { getProTeamSchedule, getPositionalRatings, loadMatchupLookup, loadMultiWeekMatchupLookup };

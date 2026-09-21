@@ -8,6 +8,7 @@
     "waivers": "node src/scripts/waiverPickups.js",
     "waivers:rec": "node src/scripts/waiverPickups.js --sort=rec",
     "startsit": "node src/scripts/startSit.js",
+    "trades": "node src/scripts/tradeRecommendations.js",
     "web": "node src/web/server.js"
   },
   "keywords": [],

@@ -4,7 +4,7 @@ const MENU_ITEMS = [
   { href: '/team', label: 'My Team', desc: 'Your current roster, positions, and matchups.' },
   { href: '/lineup', label: 'Lineup Optimizer', desc: 'The exact best lineup given this week’s projections.' },
   { href: '/waivers', label: 'Waiver Wire Recommendations', desc: 'Ranked free agents with matchup and opportunity context.' },
-  { href: '/trades', label: 'Trade Recommendations', desc: 'Coming soon.', disabled: true }
+  { href: '/trades', label: 'Trade Recommendations', desc: 'Position strength, suggested trades, handcuff chips, and buy-low/sell-high signals.' }
 ];
 
 function renderHomePage() {

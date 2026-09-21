@@ -52,7 +52,15 @@ app.get(
   )
 );
 
-app.get('/trades', (req, res) => res.send(renderTradesPage()));
+app.get(
+  '/trades',
+  asyncRoute((req) =>
+    renderTradesPage({
+      week: req.query.week ? Number(req.query.week) : undefined,
+      team: req.query.team ? Number(req.query.team) : undefined
+    })
+  )
+);
 
 app.listen(PORT, () => {
   console.log(`ESPN FF Tools web UI running at http://localhost:${PORT}`);
