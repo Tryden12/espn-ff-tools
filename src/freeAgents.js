@@ -1,5 +1,6 @@
 const axios = require('axios');
 const config = require('./config');
+const { positionIdToName } = require('./positions');
 
 // ESPN computes each player's fantasy point total server-side (`appliedTotal`)
 // already applying the league's real scoring rules, including whatever
@@ -9,7 +10,10 @@ const config = require('./config');
 // with a placeholder 100+ projected kickoff-return-yard line will wildly
 // outrank real players), so we read `appliedTotal` straight from the API
 // instead of doing our own stat-by-stat multiplication.
-async function getFreeAgentAppliedTotals({ seasonId, scoringPeriodId }) {
+// Also returns each player's `position`, computed from `defaultPositionId`,
+// since espn-fantasy-football-api's own `defaultPosition` field is mislabeled
+// for every skill position except RB (see src/positions.js).
+async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
   const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${seasonId}/segments/0/leagues/${config.leagueId}`;
 
   const response = await axios.get(url, {
@@ -27,7 +31,7 @@ async function getFreeAgentAppliedTotals({ seasonId, scoringPeriodId }) {
   });
 
   const players = response.data?.players ?? [];
-  const totals = new Map();
+  const details = new Map();
 
   players.forEach(({ player }) => {
     const stats = player.stats ?? [];
@@ -38,13 +42,16 @@ async function getFreeAgentAppliedTotals({ seasonId, scoringPeriodId }) {
       (s) => s.statSourceId === 0 && s.statSplitTypeId === 1 && s.scoringPeriodId === scoringPeriodId
     );
 
-    totals.set(player.id, {
+    details.set(player.id, {
+      positionId: player.defaultPositionId,
+      position: positionIdToName[player.defaultPositionId] ?? '-',
+      proTeamId: player.proTeamId,
       projected: projectedEntry?.appliedTotal ?? 0,
       actual: actualEntry && actualEntry.appliedTotal !== -1 ? actualEntry.appliedTotal : 0
     });
   });
 
-  return totals;
+  return details;
 }
 
-module.exports = { getFreeAgentAppliedTotals };
+module.exports = { getFreeAgentDetails };

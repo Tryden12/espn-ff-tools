@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "waivers": "node src/scripts/waiverPickups.js"
+    "waivers": "node src/scripts/waiverPickups.js",
+    "startsit": "node src/scripts/startSit.js"
   },
   "keywords": [],
   "author": "",
