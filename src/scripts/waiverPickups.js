@@ -6,7 +6,7 @@ const { proTeamIdToAbbreviation } = require('../positions');
 const { computeRecommendationScore } = require('../recommendation');
 const config = require('../config');
 
-const SORT_KEYS = ['proj', 'oprk', 'last', 'avg', 'fpts', 'rec'];
+const SORT_KEYS = ['proj', 'oprk', 'last', 'avg', 'fpts', 'rec', 'owned'];
 
 function parseArgs(argv) {
   const args = { position: null, limit: 25, week: null, sort: ['proj'] };
@@ -56,6 +56,7 @@ function getSortValue(player, details, getOpponentRank, opportunityBoosts, sortB
   if (sortBy === 'last') return detail.actual ?? -Infinity;
   if (sortBy === 'avg') return detail.seasonAverage ?? -Infinity;
   if (sortBy === 'fpts') return detail.seasonTotal ?? -Infinity;
+  if (sortBy === 'owned') return player.percentOwned ?? -Infinity;
   return detail.projected ?? -Infinity;
 }
 
@@ -74,12 +75,13 @@ function formatOpportunity(player, opportunityBoosts) {
 
 function formatRow(player, details, getOpponentRank, opportunityBoosts) {
   const detail = details.get(player.id);
-  const { position, projected, actual, seasonTotal, seasonAverage } = detail ?? {
+  const { position, projected, actual, seasonTotal, seasonAverage, isLocked } = detail ?? {
     position: player.defaultPosition,
     projected: 0,
     actual: 0,
     seasonTotal: 0,
-    seasonAverage: 0
+    seasonAverage: 0,
+    isLocked: false
   };
   const recScore = getRecommendationScore(player, details, getOpponentRank, opportunityBoosts);
 
@@ -89,14 +91,15 @@ function formatRow(player, details, getOpponentRank, opportunityBoosts) {
     team: player.proTeamAbbreviation,
     oprk: formatOprk(detail, getOpponentRank),
     opportunity: formatOpportunity(player, opportunityBoosts),
+    locked: isLocked ? 'yes' : '-',
     '% owned': player.percentOwned?.toFixed(1) ?? '-',
     '% change': player.percentChange?.toFixed(1) ?? '-',
     injury: player.isInjured ? player.injuryStatus : '-',
     'proj pts': projected.toFixed(1),
     'rec pts': recScore.toFixed(1),
-    'last pts': actual.toFixed(1),
+    'actual pts': isLocked ? actual.toFixed(1) : '-',
     avg: seasonAverage.toFixed(1),
-    fpts: seasonTotal.toFixed(1)
+    'ytd fpts': seasonTotal.toFixed(1)
   };
 }
 
@@ -138,6 +141,8 @@ async function main() {
   );
   console.log('OPRK: defense rank against this position, 1 = toughest matchup, 32 = easiest.');
   console.log('OPPORTUNITY: a draft-relevant teammate ahead of them is OUT/DOUBTFUL/IR this week.');
+  console.log('LOCKED: this player\'s game for the selected week has already started/finished — adding them');
+  console.log('  won\'t help this week, "proj pts" is now stale, but "actual pts" reflects their real result.');
   console.log('REC PTS: proj pts adjusted by OPRK (±15%) and opportunity (+20%) — sort by "rec" to rank on it.\n');
   console.table(ranked);
 }

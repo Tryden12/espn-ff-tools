@@ -33,7 +33,7 @@ async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
   const players = response.data?.players ?? [];
   const details = new Map();
 
-  players.forEach(({ player }) => {
+  players.forEach(({ player, lineupLocked }) => {
     const stats = player.stats ?? [];
     const projectedEntry = stats.find(
       (s) => s.statSourceId === 1 && s.statSplitTypeId === 1 && s.scoringPeriodId === scoringPeriodId
@@ -55,7 +55,12 @@ async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
       projected: projectedEntry?.appliedTotal ?? 0,
       actual: actualEntry && actualEntry.appliedTotal !== -1 ? actualEntry.appliedTotal : 0,
       seasonTotal: seasonEntry && seasonEntry.appliedTotal !== -1 ? seasonEntry.appliedTotal : 0,
-      seasonAverage: seasonEntry && seasonEntry.appliedAverage !== -1 ? (seasonEntry.appliedAverage ?? 0) : 0
+      seasonAverage: seasonEntry && seasonEntry.appliedAverage !== -1 ? (seasonEntry.appliedAverage ?? 0) : 0,
+      // True once this player's own NFL game (for the requested week) has
+      // kicked off. A locked player can't help you THIS week anymore even
+      // if you add them now — still worth adding for future weeks, but the
+      // projection above is now moot for the remaining games this week.
+      isLocked: Boolean(lineupLocked)
     });
   });
 

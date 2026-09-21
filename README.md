@@ -1,6 +1,7 @@
 # ESPN Fantasy Football Tools
 
-CLI tools for analyzing an ESPN fantasy football league, built on top of
+CLI tools and a small local web UI for analyzing an ESPN fantasy football
+league, built on top of
 [espn-fantasy-football-api](https://github.com/mkreiser/ESPN-Fantasy-Football-API).
 
 ## Setup
@@ -74,6 +75,13 @@ Each player's row includes:
   units on purpose, and both adjustments are intentionally modest — a big
   point-projection gap will still win over either signal alone. Sort by it
   with `--sort=rec`.
+- **LOCKED** — this player's own NFL game for the selected week has already
+  started or finished (e.g. checking waivers on a Saturday, after Thursday's
+  game). Adding a locked player can't help you this week — "proj pts" is
+  now stale (it was the pregame projection for a game that already
+  happened), while "actual pts" reflects what they actually did. Locked
+  rows are still shown (still worth adding for next week) but visually
+  dimmed so they don't get confused with players who haven't played yet.
 
 ### Start/sit recommendations
 
@@ -109,3 +117,23 @@ Both the lineup and the recommended changes show **OPRK** for each player's
 matchup that week (same scale as above). The optimizer's ranking is still
 driven entirely by ESPN's projected points — OPRK is shown for context, e.g.
 to help you decide between two close options, not blended into the math.
+
+## Web UI
+
+A local web UI ([src/web](src/web)) wraps the same underlying modules the
+CLI scripts use, so results match exactly.
+
+```bash
+npm run web
+```
+
+Then open http://localhost:3000. The home page links to:
+
+- **My Team** — your current roster with OPRK and lock status per player.
+- **Lineup Optimizer** — the same exact-optimum lineup solver as
+  `startsit`, with a week selector.
+- **Waiver Wire Recommendations** — the same ranked free-agent list as
+  `waivers`, with filters for position, sort, week, and limit.
+- **Trade Recommendations** — placeholder for a future feature.
+
+Set `PORT` in `.env` to run on a different port than the default 3000.
