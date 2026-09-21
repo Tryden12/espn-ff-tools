@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "waivers": "node src/scripts/waiverPickups.js",
+    "waivers:rec": "node src/scripts/waiverPickups.js --sort=rec",
     "startsit": "node src/scripts/startSit.js"
   },
   "keywords": [],

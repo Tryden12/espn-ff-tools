@@ -1,41 +1,102 @@
 const { createClient } = require('../espnClient');
 const { getFreeAgentDetails } = require('../freeAgents');
 const { loadMatchupLookup } = require('../matchups');
+const { getLeagueWidePlayers, findOpportunityBoosts } = require('../depthChart');
 const { proTeamIdToAbbreviation } = require('../positions');
+const { computeRecommendationScore } = require('../recommendation');
 const config = require('../config');
 
+const SORT_KEYS = ['proj', 'oprk', 'last', 'avg', 'fpts', 'rec'];
+
 function parseArgs(argv) {
-  const args = { position: null, limit: 25, week: null };
+  const args = { position: null, limit: 25, week: null, sort: ['proj'] };
   for (const arg of argv) {
     const [key, value] = arg.replace(/^--/, '').split('=');
     if (key === 'position') args.position = value.toUpperCase();
     if (key === 'limit') args.limit = Number(value);
     if (key === 'week') args.week = Number(value);
+    if (key === 'sort') args.sort = value.toLowerCase().split(',');
+  }
+  const invalid = args.sort.filter((key) => !SORT_KEYS.includes(key));
+  if (invalid.length > 0) {
+    throw new Error(`--sort has invalid key(s) [${invalid.join(', ')}] — must be one of: ${SORT_KEYS.join(', ')}`);
   }
   return args;
 }
 
+function getOprkMatchup(detail, getOpponentRank) {
+  if (!detail) return null;
+  return getOpponentRank({ proTeamId: detail.proTeamId, positionId: detail.positionId });
+}
+
+function getRecommendationScore(player, details, getOpponentRank, opportunityBoosts) {
+  const detail = details.get(player.id);
+  if (!detail) return -Infinity;
+
+  const oprkRank = getOprkMatchup(detail, getOpponentRank)?.rank ?? null;
+  return computeRecommendationScore({
+    projected: detail.projected ?? 0,
+    oprkRank,
+    hasOpportunityBoost: opportunityBoosts.has(player.id)
+  });
+}
+
+// Higher is always "better" here, so every sort mode can share one
+// descending comparator. Missing data (e.g. no OPRK on a bye) sorts last.
+function getSortValue(player, details, getOpponentRank, opportunityBoosts, sortBy) {
+  const detail = details.get(player.id);
+  if (!detail) return -Infinity;
+
+  if (sortBy === 'oprk') {
+    return getOprkMatchup(detail, getOpponentRank)?.rank ?? -Infinity;
+  }
+  if (sortBy === 'rec') {
+    return getRecommendationScore(player, details, getOpponentRank, opportunityBoosts);
+  }
+  if (sortBy === 'last') return detail.actual ?? -Infinity;
+  if (sortBy === 'avg') return detail.seasonAverage ?? -Infinity;
+  if (sortBy === 'fpts') return detail.seasonTotal ?? -Infinity;
+  return detail.projected ?? -Infinity;
+}
+
 function formatOprk(detail, getOpponentRank) {
-  if (!detail) return '-';
-  const matchup = getOpponentRank({ proTeamId: detail.proTeamId, positionId: detail.positionId });
+  const matchup = getOprkMatchup(detail, getOpponentRank);
   if (!matchup || matchup.rank === null) return '-';
   const opponentAbbrev = proTeamIdToAbbreviation[matchup.opponentProTeamId] ?? '?';
   return `${matchup.rank} (v ${opponentAbbrev})`;
 }
 
-function formatRow(player, details, getOpponentRank) {
+function formatOpportunity(player, opportunityBoosts) {
+  const boost = opportunityBoosts.get(player.id);
+  if (!boost) return '-';
+  return `↑ (${boost.name} ${boost.injuryStatus})`;
+}
+
+function formatRow(player, details, getOpponentRank, opportunityBoosts) {
   const detail = details.get(player.id);
-  const { position, projected, actual } = detail ?? { position: player.defaultPosition, projected: 0, actual: 0 };
+  const { position, projected, actual, seasonTotal, seasonAverage } = detail ?? {
+    position: player.defaultPosition,
+    projected: 0,
+    actual: 0,
+    seasonTotal: 0,
+    seasonAverage: 0
+  };
+  const recScore = getRecommendationScore(player, details, getOpponentRank, opportunityBoosts);
+
   return {
     name: player.fullName,
     position,
     team: player.proTeamAbbreviation,
     oprk: formatOprk(detail, getOpponentRank),
+    opportunity: formatOpportunity(player, opportunityBoosts),
     '% owned': player.percentOwned?.toFixed(1) ?? '-',
     '% change': player.percentChange?.toFixed(1) ?? '-',
     injury: player.isInjured ? player.injuryStatus : '-',
     'proj pts': projected.toFixed(1),
-    'last pts': actual.toFixed(1)
+    'rec pts': recScore.toFixed(1),
+    'last pts': actual.toFixed(1),
+    avg: seasonAverage.toFixed(1),
+    fpts: seasonTotal.toFixed(1)
   };
 }
 
@@ -46,11 +107,13 @@ async function main() {
   const league = await client.getLeagueInfo({ seasonId: config.seasonId });
   const scoringPeriodId = args.week ?? league.currentScoringPeriodId;
 
-  const [freeAgents, details, getOpponentRank] = await Promise.all([
+  const [freeAgents, details, getOpponentRank, leagueWidePlayers] = await Promise.all([
     client.getFreeAgents({ seasonId: config.seasonId, scoringPeriodId }),
     getFreeAgentDetails({ seasonId: config.seasonId, scoringPeriodId }),
-    loadMatchupLookup({ seasonId: config.seasonId, scoringPeriodId })
+    loadMatchupLookup({ seasonId: config.seasonId, scoringPeriodId }),
+    getLeagueWidePlayers({ seasonId: config.seasonId, scoringPeriodId })
   ]);
+  const opportunityBoosts = findOpportunityBoosts(leagueWidePlayers);
 
   let candidates = freeAgents.filter((player) => !player.isInjured || player.injuryStatus !== 'OUT');
   if (args.position) {
@@ -58,12 +121,24 @@ async function main() {
   }
 
   const ranked = candidates
-    .sort((a, b) => (details.get(b.id)?.projected ?? 0) - (details.get(a.id)?.projected ?? 0))
+    .sort((a, b) => {
+      for (const sortBy of args.sort) {
+        const diff =
+          getSortValue(b, details, getOpponentRank, opportunityBoosts, sortBy) -
+          getSortValue(a, details, getOpponentRank, opportunityBoosts, sortBy);
+        if (diff !== 0) return diff;
+      }
+      return 0;
+    })
     .slice(0, args.limit)
-    .map((player) => formatRow(player, details, getOpponentRank));
+    .map((player) => formatRow(player, details, getOpponentRank, opportunityBoosts));
 
-  console.log(`\nTop waiver pickups for ${league.name} — Week ${scoringPeriodId}${args.position ? ` (${args.position})` : ''}\n`);
-  console.log('OPRK: defense rank against this position, 1 = toughest matchup, 32 = easiest.\n');
+  console.log(
+    `\nTop waiver pickups for ${league.name} — Week ${scoringPeriodId}${args.position ? ` (${args.position})` : ''} — sorted by ${args.sort.join(' > ')}\n`
+  );
+  console.log('OPRK: defense rank against this position, 1 = toughest matchup, 32 = easiest.');
+  console.log('OPPORTUNITY: a draft-relevant teammate ahead of them is OUT/DOUBTFUL/IR this week.');
+  console.log('REC PTS: proj pts adjusted by OPRK (±15%) and opportunity (+20%) — sort by "rec" to rank on it.\n');
   console.table(ranked);
 }
 

@@ -28,20 +28,52 @@ league's scoring settings.
 npm run waivers
 ```
 
+Favorite: top WR pickups ranked by the blended recommendation score for a
+given week:
+
+```bash
+node src/scripts/waiverPickups.js --position=WR --sort=rec --limit=10 --week=3
+```
+
+(or `npm run waivers:rec -- --position=WR --limit=10 --week=3`, using the
+`waivers:rec` shortcut below)
+
 Options:
 
 ```bash
-node src/scripts/waiverPickups.js --position=RB --limit=15 --week=4
+node src/scripts/waiverPickups.js --position=RB --limit=15 --week=4 --sort=oprk
 ```
 
 - `--position` — filter to a position (`QB`, `RB`, `WR`, `TE`, `D/ST`, `K`).
 - `--limit` — number of players to show (default 25).
 - `--week` — scoring period to evaluate (defaults to the current week).
+- `--sort` — `proj` (default, ESPN's projected points for the week), `oprk`
+  (easiest matchup first), `last` (previous week's actual points), `avg`
+  (season points-per-game average), or `fpts` (season total points). `last`,
+  `avg`, and `fpts` are only meaningful once games have actually been played.
+  Pass a comma-separated list for multi-key sorting, e.g.
+  `--sort=oprk,proj` sorts by easiest matchup first, breaking ties by
+  projected points. `npm run waivers:rec` is shorthand for `--sort=rec`.
 
-Each player's row includes **OPRK** — ESPN's own defense-vs-position
-strength ranking for their opponent that week (1 = toughest matchup for the
-position, 32 = easiest). Use it alongside projected points, not instead of
-them — it's not folded into the ranking math.
+Each player's row includes:
+
+- **OPRK** — ESPN's own defense-vs-position strength ranking for their
+  opponent that week (1 = toughest matchup for the position, 32 =
+  easiest).
+- **OPPORTUNITY** — flags when a draft-relevant teammate ahead of them at
+  the same position is OUT/DOUBTFUL/IR this week
+  ([src/depthChart.js](src/depthChart.js)). ESPN doesn't expose real depth
+  charts, so "ahead of them" is approximated with preseason average draft
+  rank (stable from week one, unlike season-to-date stats which are noisy
+  in the first few weeks) — and only an injury to someone who was actually
+  draft-relevant counts, so two buried bench players don't "boost" each
+  other.
+- **REC PTS** ([src/recommendation.js](src/recommendation.js)) — a blended
+  recommendation score: projected points nudged ±15% by matchup favorability
+  and +20% if there's an opportunity boost. It stays in point-equivalent
+  units on purpose, and both adjustments are intentionally modest — a big
+  point-projection gap will still win over either signal alone. Sort by it
+  with `--sort=rec`.
 
 ### Start/sit recommendations
 

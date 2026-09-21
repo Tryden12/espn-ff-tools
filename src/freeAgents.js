@@ -41,13 +41,21 @@ async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
     const actualEntry = stats.find(
       (s) => s.statSourceId === 0 && s.statSplitTypeId === 1 && s.scoringPeriodId === scoringPeriodId
     );
+    // Season-to-date total/average, same numbers ESPN's UI shows as FPTS/AVG.
+    // Disambiguated by seasonId since ESPN also includes a prior-season entry
+    // with the same statSourceId/statSplitTypeId/scoringPeriodId.
+    const seasonEntry = stats.find(
+      (s) => s.statSourceId === 0 && s.statSplitTypeId === 0 && s.scoringPeriodId === 0 && s.seasonId === seasonId
+    );
 
     details.set(player.id, {
       positionId: player.defaultPositionId,
       position: positionIdToName[player.defaultPositionId] ?? '-',
       proTeamId: player.proTeamId,
       projected: projectedEntry?.appliedTotal ?? 0,
-      actual: actualEntry && actualEntry.appliedTotal !== -1 ? actualEntry.appliedTotal : 0
+      actual: actualEntry && actualEntry.appliedTotal !== -1 ? actualEntry.appliedTotal : 0,
+      seasonTotal: seasonEntry && seasonEntry.appliedTotal !== -1 ? seasonEntry.appliedTotal : 0,
+      seasonAverage: seasonEntry && seasonEntry.appliedAverage !== -1 ? (seasonEntry.appliedAverage ?? 0) : 0
     });
   });
 
