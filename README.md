@@ -18,7 +18,31 @@ league, built on top of
    - `ESPN_S2` / `SWID` — required for private leagues. Grab them from
      `espn.com` in Chrome DevTools under Application > Cookies.
 
-## Scripts
+## Web UI
+
+A local web UI ([src/web](src/web)) wraps the same underlying modules the
+CLI scripts use, so results match exactly.
+
+```bash
+npm run web
+```
+
+Then open http://localhost:3000. The home page links to:
+
+- **Curated Suggestions** — the same digest as `curated`, with a week
+  selector.
+- **My Team** — your current roster with OPRK and lock status per player.
+- **Lineup Optimizer** — the same exact-optimum lineup solver as
+  `startsit`, with a week selector.
+- **Waiver Wire Recommendations** — the same ranked free-agent list as
+  `waivers`, with filters for position, sort, week, and limit.
+- **Trade Recommendations** — the same analysis as `trades`, with a week
+  selector.
+
+Set `PORT` in `.env` to run on a different port than the default 3000.
+
+<details>
+<summary><strong>Scripts</strong></summary>
 
 ### Waiver wire pickups
 
@@ -265,25 +289,4 @@ What it shows, in order:
 The digest keeps itself internally consistent: if step 2 suggests dropping
 a player, step 3 won't also suggest trading that same player away.
 
-## Web UI
-
-A local web UI ([src/web](src/web)) wraps the same underlying modules the
-CLI scripts use, so results match exactly.
-
-```bash
-npm run web
-```
-
-Then open http://localhost:3000. The home page links to:
-
-- **Curated Suggestions** — the same digest as `curated`, with a week
-  selector.
-- **My Team** — your current roster with OPRK and lock status per player.
-- **Lineup Optimizer** — the same exact-optimum lineup solver as
-  `startsit`, with a week selector.
-- **Waiver Wire Recommendations** — the same ranked free-agent list as
-  `waivers`, with filters for position, sort, week, and limit.
-- **Trade Recommendations** — the same analysis as `trades`, with a week
-  selector.
-
-Set `PORT` in `.env` to run on a different port than the default 3000.
+</details>
