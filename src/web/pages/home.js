@@ -1,6 +1,7 @@
 const { renderLayout } = require('../layout');
 
 const MENU_ITEMS = [
+  { href: '/curated', label: 'Curated Suggestions', desc: 'The top 1-2 moves from lineup, waivers, and trades, in one digest.' },
   { href: '/team', label: 'My Team', desc: 'Your current roster, positions, and matchups.' },
   { href: '/lineup', label: 'Lineup Optimizer', desc: 'The exact best lineup given this week’s projections.' },
   { href: '/waivers', label: 'Waiver Wire Recommendations', desc: 'Ranked free agents with matchup and opportunity context.' },

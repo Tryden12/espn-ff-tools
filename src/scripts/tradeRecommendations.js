@@ -99,28 +99,38 @@ async function main() {
     })
   );
 
-  const { complementary, upgradeOnly } = findComplementaryTrades({
+  const { complementary, upgradeOnly, nearMisses } = findComplementaryTrades({
     myTeamId: myTeam.id,
     teamStrengths: strength,
     teamNames
   });
 
-  console.log('\n--- Suggested trades ---\n');
-  if (complementary.length === 0 && upgradeOnly.length === 0) {
-    console.log('No clear trade upgrades found this week given current position strength across the league.\n');
-  } else {
-    const rows = [...complementary, ...upgradeOnly].slice(0, 10).map((t) => ({
-      fit: t.tier === 'complementary' ? 'mutual need' : 'upgrade only',
+  function formatTradeRow(t) {
+    const fit = t.tier === 'complementary' ? 'mutual need' : t.tier === 'upgrade-only' ? 'upgrade only' : 'near miss';
+    return {
+      fit,
       'trade with': t.withTeamName,
       'you give': `${t.give.player.name} (${t.give.position}, ${t.give.player.seasonAverage.toFixed(1)} avg)`,
       'you get': `${t.get.player.name} (${t.get.position}, ${t.get.player.seasonAverage.toFixed(1)} avg)`,
       'proj upgrade': `+${t.upgrade.toFixed(1)}`
-    }));
-    console.table(rows);
+    };
+  }
+
+  console.log('\n--- Suggested trades ---\n');
+  if (complementary.length === 0 && upgradeOnly.length === 0) {
+    console.log('No clear trade upgrades found this week given current position strength across the league.\n');
+  } else {
+    console.table([...complementary, ...upgradeOnly].slice(0, 10).map(formatTradeRow));
     console.log(
       '"mutual need" = they\'re also weak where you\'re strong (likely to say yes).' +
         ' "upgrade only" = they have the depth to spare it, but may not want your side as much — expect to negotiate.\n'
     );
+  }
+
+  if (nearMisses.length > 0) {
+    console.log('--- Near-miss trades (real upgrade, but value gap is too wide to be realistic) ---\n');
+    console.table(nearMisses.slice(0, 5).map(formatTradeRow));
+    console.log('Worth a speculative offer, or a sense of how big a throw-in you\'d need to add to make it work.\n');
   }
 
   const handcuffs = findHandcuffOpportunities({ teams: teamsWithNames, myTeamId: myTeam.id });

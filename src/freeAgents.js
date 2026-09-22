@@ -1,6 +1,7 @@
 const axios = require('axios');
 const config = require('./config');
 const { positionIdToName } = require('./positions');
+const { extractSeasonUsage } = require('./usageStats');
 
 // ESPN computes each player's fantasy point total server-side (`appliedTotal`)
 // already applying the league's real scoring rules, including whatever
@@ -48,6 +49,8 @@ async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
       (s) => s.statSourceId === 0 && s.statSplitTypeId === 0 && s.scoringPeriodId === 0 && s.seasonId === seasonId
     );
 
+    const { targets, carries } = extractSeasonUsage(seasonEntry);
+
     details.set(player.id, {
       positionId: player.defaultPositionId,
       position: positionIdToName[player.defaultPositionId] ?? '-',
@@ -56,6 +59,8 @@ async function getFreeAgentDetails({ seasonId, scoringPeriodId }) {
       actual: actualEntry && actualEntry.appliedTotal !== -1 ? actualEntry.appliedTotal : 0,
       seasonTotal: seasonEntry && seasonEntry.appliedTotal !== -1 ? seasonEntry.appliedTotal : 0,
       seasonAverage: seasonEntry && seasonEntry.appliedAverage !== -1 ? (seasonEntry.appliedAverage ?? 0) : 0,
+      seasonTargets: targets,
+      seasonCarries: carries,
       // True once this player's own NFL game (for the requested week) has
       // kicked off. A locked player can't help you THIS week anymore even
       // if you add them now — still worth adding for future weeks, but the

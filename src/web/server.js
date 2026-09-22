@@ -4,6 +4,7 @@ const { renderTeamPage } = require('./pages/team');
 const { renderLineupPage } = require('./pages/lineup');
 const { renderWaiversPage } = require('./pages/waivers');
 const { renderTradesPage } = require('./pages/trades');
+const { renderCuratedPage } = require('./pages/curated');
 const { renderLayout, escapeHtml } = require('./layout');
 
 const PORT = process.env.PORT ?? 3000;
@@ -60,6 +61,11 @@ app.get(
       team: req.query.team ? Number(req.query.team) : undefined
     })
   )
+);
+
+app.get(
+  '/curated',
+  asyncRoute((req) => renderCuratedPage({ week: req.query.week ? Number(req.query.week) : undefined }))
 );
 
 app.listen(PORT, () => {

@@ -4,9 +4,10 @@ const { loadMatchupLookup } = require('../matchups');
 const { getLeagueWidePlayers, findOpportunityBoosts } = require('../depthChart');
 const { proTeamIdToAbbreviation } = require('../positions');
 const { computeRecommendationScore } = require('../recommendation');
+const { computeGamesPlayed, formatUsageTotal, formatUsageAverage, usageSortValue } = require('../usageStats');
 const config = require('../config');
 
-const SORT_KEYS = ['proj', 'oprk', 'last', 'avg', 'fpts', 'rec', 'owned'];
+const SORT_KEYS = ['proj', 'oprk', 'last', 'avg', 'fpts', 'rec', 'owned', 'usage', 'usageavg'];
 
 function parseArgs(argv) {
   const args = { position: null, limit: 25, week: null, sort: ['proj'] };
@@ -57,6 +58,11 @@ function getSortValue(player, details, getOpponentRank, opportunityBoosts, sortB
   if (sortBy === 'avg') return detail.seasonAverage ?? -Infinity;
   if (sortBy === 'fpts') return detail.seasonTotal ?? -Infinity;
   if (sortBy === 'owned') return player.percentOwned ?? -Infinity;
+  if (sortBy === 'usage' || sortBy === 'usageavg') {
+    const usage = { targets: detail.seasonTargets, carries: detail.seasonCarries };
+    const gamesPlayed = computeGamesPlayed(detail);
+    return usageSortValue(detail.position, usage, { perGame: sortBy === 'usageavg', gamesPlayed });
+  }
   return detail.projected ?? -Infinity;
 }
 
@@ -84,6 +90,8 @@ function formatRow(player, details, getOpponentRank, opportunityBoosts) {
     isLocked: false
   };
   const recScore = getRecommendationScore(player, details, getOpponentRank, opportunityBoosts);
+  const usage = { targets: detail?.seasonTargets ?? 0, carries: detail?.seasonCarries ?? 0 };
+  const gamesPlayed = detail ? computeGamesPlayed(detail) : 0;
 
   return {
     name: player.fullName,
@@ -99,7 +107,9 @@ function formatRow(player, details, getOpponentRank, opportunityBoosts) {
     'rec pts': recScore.toFixed(1),
     'actual pts': isLocked ? actual.toFixed(1) : '-',
     avg: seasonAverage.toFixed(1),
-    'ytd fpts': seasonTotal.toFixed(1)
+    'ytd fpts': seasonTotal.toFixed(1),
+    'ytd usage': formatUsageTotal(position, usage),
+    'avg usage': formatUsageAverage(position, usage, gamesPlayed)
   };
 }
 
@@ -143,7 +153,12 @@ async function main() {
   console.log('OPPORTUNITY: a draft-relevant teammate ahead of them is OUT/DOUBTFUL/IR this week.');
   console.log('LOCKED: this player\'s game for the selected week has already started/finished — adding them');
   console.log('  won\'t help this week, "proj pts" is now stale, but "actual pts" reflects their real result.');
-  console.log('REC PTS: proj pts adjusted by OPRK (±15%) and opportunity (+20%) — sort by "rec" to rank on it.\n');
+  console.log('REC PTS: proj pts adjusted by OPRK (±15%) and opportunity (+20%) — sort by "rec" to rank on it.');
+  console.log(
+    'USAGE: targets (WR/TE) or carries + targets (RB, since receiving work counts in PPR) — opportunity share,' +
+      ' often a more stable signal than points on a small sample. Not shown for QB/D-ST/K. Sort by "usage"' +
+      ' (season total) or "usageavg" (per game).\n'
+  );
   console.table(ranked);
 }
 

@@ -70,7 +70,7 @@ async function renderTradesPage({ week, team } = {}) {
       const cells = TRADE_POSITIONS.map((pos) => {
         const p = teamStrength.positions[pos];
         const category = categorizeStrength(p.rank, numTeams);
-        return `<td><span class="${CATEGORY_CLASS[category]}">${p.rank}</span></td>`;
+        return `<td style="text-align:center;"><span class="${CATEGORY_CLASS[category]}">${p.rank}</span></td>`;
       }).join('');
       const isMe = teamStrength.teamId === myTeam.id;
       return `<tr${isMe ? ' style="font-weight:600"' : ''}>
@@ -80,24 +80,27 @@ async function renderTradesPage({ week, team } = {}) {
     })
     .join('');
 
-  const { complementary, upgradeOnly } = findComplementaryTrades({
+  const { complementary, upgradeOnly, nearMisses } = findComplementaryTrades({
     myTeamId: myTeam.id,
     teamStrengths: strength,
     teamNames
   });
   const allTrades = [...complementary, ...upgradeOnly].slice(0, 10);
 
-  const tradesHtml =
-    allTrades.length === 0
-      ? '<p>No clear trade upgrades found this week given current position strength across the league.</p>'
-      : `
-      <table>
+  const FIT_PILL = {
+    complementary: '<span class="pill boost">mutual need</span>',
+    'upgrade-only': '<span class="pill">upgrade only</span>',
+    'near-miss': '<span class="pill">near miss</span>'
+  };
+
+  function tradeTable(rows) {
+    return `<table>
         <thead><tr><th>Fit</th><th>Trade With</th><th>You Give</th><th>You Get</th><th>Proj Upgrade</th></tr></thead>
         <tbody>
-          ${allTrades
+          ${rows
             .map(
               (t) => `<tr>
-            <td>${t.tier === 'complementary' ? '<span class="pill boost">mutual need</span>' : '<span class="pill">upgrade only</span>'}</td>
+            <td>${FIT_PILL[t.tier]}</td>
             <td>${escapeHtml(t.withTeamName)}</td>
             <td>${escapeHtml(t.give.player.name)} (${t.give.position}, ${t.give.player.seasonAverage.toFixed(1)} avg)</td>
             <td>${escapeHtml(t.get.player.name)} (${t.get.position}, ${t.get.player.seasonAverage.toFixed(1)} avg)</td>
@@ -106,11 +109,23 @@ async function renderTradesPage({ week, team } = {}) {
             )
             .join('')}
         </tbody>
-      </table>
+      </table>`;
+  }
+
+  const tradesHtml =
+    (allTrades.length === 0
+      ? '<p>No clear trade upgrades found this week given current position strength across the league.</p>'
+      : `${tradeTable(allTrades)}
       <p class="muted">
         "Mutual need" = they're also weak where you're strong (likely to say yes).
         "Upgrade only" = they have the depth to spare it, but may not want your side as much — expect to negotiate.
-      </p>`;
+      </p>`) +
+    (nearMisses.length === 0
+      ? ''
+      : `
+      <h3 style="margin-top:24px;">Near-Miss Trades</h3>
+      <p class="muted">A real upgrade, but the value gap is too wide to call realistic — worth a speculative offer, or a sense of how big a throw-in you'd need.</p>
+      ${tradeTable(nearMisses.slice(0, 5))}`);
 
   const handcuffs = findHandcuffOpportunities({ teams: teamsWithNames, myTeamId: myTeam.id });
   const handcuffsHtml =
@@ -251,7 +266,7 @@ async function renderTradesPage({ week, team } = {}) {
       <p class="muted">Rank of ${numTeams} at each position, 1 = strongest. Colored like OPRK: green = strong, red = weak.</p>
       <table>
         <thead>
-          <tr><th>Team</th>${TRADE_POSITIONS.map((pos) => `<th>${pos}</th>`).join('')}</tr>
+          <tr><th>Team</th>${TRADE_POSITIONS.map((pos) => `<th style="text-align:center;">${pos}</th>`).join('')}</tr>
         </thead>
         <tbody>${leagueGridRows}</tbody>
       </table>

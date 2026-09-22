@@ -4,6 +4,12 @@ const { loadMatchupLookup } = require('../../matchups');
 const { getLeagueWidePlayers, findOpportunityBoosts } = require('../../depthChart');
 const { proTeamIdToAbbreviation } = require('../../positions');
 const { computeRecommendationScore } = require('../../recommendation');
+const {
+  computeGamesPlayed,
+  formatUsageTotal,
+  formatUsageAverage,
+  usageSortValue
+} = require('../../usageStats');
 const config = require('../../config');
 const { renderLayout, escapeHtml, oprkClass } = require('../layout');
 
@@ -20,8 +26,14 @@ const SORT_COLUMNS = [
   { key: 'rec', label: 'Rec Pts' },
   { key: 'last', label: 'Actual Pts' },
   { key: 'avg', label: 'Avg' },
-  { key: 'fpts', label: 'YTD FPTS' }
+  { key: 'fpts', label: 'YTD FPTS' },
+  { key: 'usage', label: 'YTD Usage' },
+  { key: 'usageavg', label: 'Avg Usage' }
 ];
+
+function getUsageInputs(detail) {
+  return { targets: detail?.seasonTargets ?? 0, carries: detail?.seasonCarries ?? 0 };
+}
 
 function getOprkMatchup(detail, getOpponentRank) {
   if (!detail) return null;
@@ -72,6 +84,10 @@ function getSortValue(player, details, getOpponentRank, opportunityBoosts, recRa
   if (sortBy === 'last') return detail.actual ?? -Infinity;
   if (sortBy === 'avg') return detail.seasonAverage ?? -Infinity;
   if (sortBy === 'fpts') return detail.seasonTotal ?? -Infinity;
+  if (sortBy === 'usage' || sortBy === 'usageavg') {
+    const gamesPlayed = computeGamesPlayed(detail);
+    return usageSortValue(detail.position, getUsageInputs(detail), { perGame: sortBy === 'usageavg', gamesPlayed });
+  }
   return detail.projected ?? -Infinity;
 }
 
@@ -129,6 +145,8 @@ async function renderWaiversPage({ position, sort, dir, limit, week } = {}) {
       const boost = opportunityBoosts.get(player.id);
       const recScore = getRecommendationScore(player, details, getOpponentRank, opportunityBoosts);
       const isLocked = detail?.isLocked ?? false;
+      const usageInputs = getUsageInputs(detail);
+      const gamesPlayed = detail ? computeGamesPlayed(detail) : 0;
 
       return `<tr${isLocked ? ' style="opacity:0.6"' : ''}>
         <td>${recRankById.get(player.id) ?? '-'}</td>
@@ -145,6 +163,8 @@ async function renderWaiversPage({ position, sort, dir, limit, week } = {}) {
         <td>${isLocked ? (detail?.actual ?? 0).toFixed(1) : '-'}</td>
         <td>${(detail?.seasonAverage ?? 0).toFixed(1)}</td>
         <td>${(detail?.seasonTotal ?? 0).toFixed(1)}</td>
+        <td>${escapeHtml(formatUsageTotal(detail?.position, usageInputs))}</td>
+        <td>${escapeHtml(formatUsageAverage(detail?.position, usageInputs, gamesPlayed))}</td>
       </tr>`;
     })
     .join('');
@@ -182,6 +202,8 @@ async function renderWaiversPage({ position, sort, dir, limit, week } = {}) {
         Rec score: proj pts adjusted by OPRK (±15%) and opportunity (+20%).
         Rank: this player's position in the recommendation order, no matter what you've sorted by —
         click it to get back to the recommended list.
+        Usage: targets (WR/TE) or carries + targets (RB, since receiving work counts in PPR) — opportunity
+        share, often a more stable signal than points on a small sample. Not shown for QB/D-ST/K.
         Click any column header to sort by it; click again to flip direction.
       </p>
       <form class="filters" method="get" action="/waivers">
@@ -215,6 +237,8 @@ async function renderWaiversPage({ position, sort, dir, limit, week } = {}) {
             <th>${sortableHeader('last')}</th>
             <th>${sortableHeader('avg')}</th>
             <th>${sortableHeader('fpts')}</th>
+            <th>${sortableHeader('usage')}</th>
+            <th>${sortableHeader('usageavg')}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>

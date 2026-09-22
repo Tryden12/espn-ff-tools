@@ -50,11 +50,13 @@ node src/scripts/waiverPickups.js --position=RB --limit=15 --week=4 --sort=oprk
 - `--week` — scoring period to evaluate (defaults to the current week).
 - `--sort` — `proj` (default, ESPN's projected points for the week), `oprk`
   (easiest matchup first), `last` (previous week's actual points), `avg`
-  (season points-per-game average), or `fpts` (season total points). `last`,
-  `avg`, and `fpts` are only meaningful once games have actually been played.
-  Pass a comma-separated list for multi-key sorting, e.g.
-  `--sort=oprk,proj` sorts by easiest matchup first, breaking ties by
-  projected points. `npm run waivers:rec` is shorthand for `--sort=rec`.
+  (season points-per-game average), `fpts` (season total points), `owned`
+  (% rostered league-wide), `usage` (season-total targets/carries), or
+  `usageavg` (per-game targets/carries — see below). `last`, `avg`, and
+  `fpts` are only meaningful once games have actually been played. Pass a
+  comma-separated list for multi-key sorting, e.g. `--sort=oprk,proj` sorts
+  by easiest matchup first, breaking ties by projected points.
+  `npm run waivers:rec` is shorthand for `--sort=rec`.
 
 Each player's row includes:
 
@@ -82,6 +84,18 @@ Each player's row includes:
   happened), while "actual pts" reflects what they actually did. Locked
   rows are still shown (still worth adding for next week) but visually
   dimmed so they don't get confused with players who haven't played yet.
+- **YTD USAGE / AVG USAGE** ([src/usageStats.js](src/usageStats.js)) —
+  targets for WR/TE; carries *and* targets for RB (a PPR league values a
+  back's receiving work too, so carries alone would hide it); nothing for
+  QB/D-ST/K, where the concept doesn't apply. These are raw per-stat
+  volume, not a scored total — an opportunity/workload signal that's often
+  more stable than points on a small sample: a player racking up
+  targets/carries but scoring inefficiently is a classic buy-low profile,
+  and it flags regression risk for a player scoring well on very little
+  usage. YTD is the season total; Avg divides by games played (backed out
+  from `appliedTotal / appliedAverage`, since ESPN doesn't expose games
+  played directly). Sort by either with `--sort=usage` or
+  `--sort=usageavg`.
 
 ### Start/sit recommendations
 
@@ -155,13 +169,23 @@ What it shows:
   with the team selector to scout a potential trade partner.
 - **Suggested Trades** ([src/tradeFinder.js](src/tradeFinder.js)) — offers
   your best surplus player at a strong position for another team's best
-  surplus player at one of your weak positions, but only when it's a real
-  upgrade over what you're currently starting there. Two tiers: **mutual
+  surplus player at any position ranked below your league's median (not
+  just the strict bottom-third "WEAK" bucket — in a 10-team league that'd
+  only cover ranks 8-10, so a rank-7 position with real room to improve
+  would otherwise never be considered), but only when it's a real upgrade
+  over what you're currently starting there. Two tiers: **mutual
   need** (they're also weak where you're strong — likely to say yes) and
   **upgrade only** (they have the depth to spare it, but may not want your
   side as much). With a small league, requiring both sides' needs to align
   is often too strict to find anything, hence the second, less-certain
-  tier.
+  tier. Every suggestion also has to be a *realistic* offer — the player
+  you'd receive can't be worth more than 1.5x the player you're giving up
+  (by season-per-game average), so it won't propose trading a bench WR for
+  a top-5 QB. If nothing clears both bars, it correctly says so rather than
+  manufacturing a lowball offer no one would accept. Trades between 1.5x
+  and 2.5x show separately under **Near-Miss Trades** — not realistic
+  enough to recommend outright, but worth a speculative offer or a sense of
+  how big a throw-in you'd need to make one work.
 - **Handcuff Trade Chips** ([src/handcuffs.js](src/handcuffs.js)) — RBs on
   your roster that are a clear backup (not just a committee partner — the
   starter has to be meaningfully better ranked) to a starter owned by
@@ -193,6 +217,54 @@ noisy this early in a season — one big game can swing a position's
 own judgment, not a final answer, and it gets more reliable as more games
 are played.
 
+### Curated suggestions
+
+A single digest that pulls the top 1-2 actionable moves out of the other
+three features, for when you just want "what should I do this week"
+without reading every report.
+
+```bash
+npm run curated
+```
+
+Options:
+
+```bash
+node src/scripts/curatedSuggestions.js --week=4
+```
+
+- `--week` — scoring period to evaluate (defaults to the current week).
+
+What it shows, in order:
+
+1. **Lineup changes** — the exact optimizer's recommended swaps (same as
+   `startsit`).
+2. **Waiver add/drops** ([src/addDropFinder.js](src/addDropFinder.js)) —
+   the best available free agents matched against your weakest player at the
+   same position, so it answers "add who, drop who" together instead of
+   leaving you to figure out the drop side yourself. The drop candidate is
+   your weakest player by season-per-game average (not just this week's
+   projection), so one bad-matchup week for an otherwise-good bench player
+   doesn't get them flagged. Normally that's a bench player; if a position
+   has no bench depth at all (the usual case for D/ST, K, and sometimes TE,
+   which most rosters only carry one of), it falls back to comparing against
+   your current starter — the classic streaming move — and marks it
+   `starter` so it's clear that's what's happening. Only shown when it's a
+   real upgrade (at least 1 projected point) — both sides compared on THIS
+   week's projection, deliberately, since early in a season a 2-3 game
+   season average is closer to noise than signal (one huge game can put a
+   bench piece's average above a star's) while ESPN's weekly projection
+   already models matchup and role. The tradeoff: a season-long standout
+   having one so-so single-week projection won't clear this bar — for that
+   angle, see the Trade Recommendations page's Buy Low and position-strength
+   views instead. Anything within 0.5 pts of the bar (up to 3 per position)
+   is shown separately under **Near Misses** — a real but modest edge, left
+   for your own judgment rather than silently discarded.
+3. **Top 1-2 trade ideas** — the best of `trades`' suggested trades.
+
+The digest keeps itself internally consistent: if step 2 suggests dropping
+a player, step 3 won't also suggest trading that same player away.
+
 ## Web UI
 
 A local web UI ([src/web](src/web)) wraps the same underlying modules the
@@ -204,6 +276,8 @@ npm run web
 
 Then open http://localhost:3000. The home page links to:
 
+- **Curated Suggestions** — the same digest as `curated`, with a week
+  selector.
 - **My Team** — your current roster with OPRK and lock status per player.
 - **Lineup Optimizer** — the same exact-optimum lineup solver as
   `startsit`, with a week selector.

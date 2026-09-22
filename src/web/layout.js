@@ -8,6 +8,7 @@ function escapeHtml(value) {
 
 const NAV_ITEMS = [
   { href: '/', label: 'Home' },
+  { href: '/curated', label: 'Curated Suggestions' },
   { href: '/team', label: 'My Team' },
   { href: '/lineup', label: 'Lineup Optimizer' },
   { href: '/waivers', label: 'Waiver Wire' },
@@ -66,6 +67,12 @@ function renderLayout({ title, activePath, body }) {
       border-radius: 10px;
       padding: 20px;
       margin-bottom: 16px;
+      /* Scrolls here, not on the table itself: a table with display:block
+         shrinks to its content width instead of filling the card when
+         content is narrower, leaving an ugly empty gap. Scrolling the card
+         keeps a narrow table stretched to 100% while still containing a
+         too-wide one instead of letting it break out past the border. */
+      overflow-x: auto;
     }
     .menu-table td { padding: 14px 16px; }
     .menu-table a { color: #6fa8ff; text-decoration: none; font-weight: 600; }
