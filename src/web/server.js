@@ -32,7 +32,12 @@ app.get('/', (req, res) => res.send(renderHomePage()));
 
 app.get(
   '/team',
-  asyncRoute((req) => renderTeamPage({ week: req.query.week ? Number(req.query.week) : undefined }))
+  asyncRoute((req) =>
+    renderTeamPage({
+      week: req.query.week ? Number(req.query.week) : undefined,
+      metric: req.query.metric || undefined
+    })
+  )
 );
 
 app.get(

@@ -48,11 +48,15 @@ function computeTeamPositionStrength({ teams, lineupPositionCount }) {
 
 // Rank thresholds scale with league size: top third = strong, bottom third
 // = weak, middle = average. Works for the common 8-12 team league sizes.
+function strengthThird(numTeams) {
+  return Math.max(1, Math.round(numTeams / 3));
+}
+
 function categorizeStrength(rank, numTeams) {
-  const third = Math.max(1, Math.round(numTeams / 3));
+  const third = strengthThird(numTeams);
   if (rank <= third) return 'STRONG';
   if (rank > numTeams - third) return 'WEAK';
   return 'AVERAGE';
 }
 
-module.exports = { computeTeamPositionStrength, categorizeStrength, TRADE_POSITIONS };
+module.exports = { computeTeamPositionStrength, categorizeStrength, strengthThird, TRADE_POSITIONS };
