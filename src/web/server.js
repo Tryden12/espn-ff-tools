@@ -63,7 +63,10 @@ app.get(
   asyncRoute((req) =>
     renderTradesPage({
       week: req.query.week ? Number(req.query.week) : undefined,
-      team: req.query.team ? Number(req.query.team) : undefined
+      team: req.query.team ? Number(req.query.team) : undefined,
+      give: [req.query.give ?? []].flat().map(Number).filter(Number.isInteger),
+      target: [req.query.target ?? []].flat().map(Number).filter(Number.isInteger),
+      targetSearch: typeof req.query.targetSearch === 'string' ? req.query.targetSearch : undefined
     })
   )
 );

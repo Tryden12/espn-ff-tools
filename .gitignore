@@ -21,6 +21,9 @@ yarn-error.log*
 # Testing
 coverage/
 
+# Cached third-party API responses
+.cache/
+
 # OS files
 .DS_Store
 Thumbs.db

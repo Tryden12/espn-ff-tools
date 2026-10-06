@@ -1,3 +1,5 @@
+const { ATTRIBUTION_URL } = require('../fantasyCalc');
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -79,6 +81,7 @@ function renderLayout({ title, activePath, body }) {
     .menu-table a:hover { text-decoration: underline; }
     .menu-table .desc { color: #a9b1bd; }
     .muted { color: #7c8593; font-size: 13px; }
+    main a { color: #6fa8ff; }
     form.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
     form.filters label { display: flex; flex-direction: column; font-size: 12px; color: #a9b1bd; gap: 4px; }
     form.filters input, form.filters select {
@@ -116,4 +119,10 @@ function oprkClass(rank) {
   return '';
 }
 
-module.exports = { renderLayout, escapeHtml, oprkClass };
+// FantasyCalc's terms require a visible attribution link next to any data
+// derived from their values.
+function fantasyCalcAttribution() {
+  return `<p class="muted">Trade values from <a href="${ATTRIBUTION_URL}" target="_blank" rel="noopener">FantasyCalc.com</a></p>`;
+}
+
+module.exports = { renderLayout, escapeHtml, oprkClass, fantasyCalcAttribution };

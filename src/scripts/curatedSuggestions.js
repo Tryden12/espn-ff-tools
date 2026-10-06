@@ -8,8 +8,8 @@ const { getLeagueWidePlayers, findOpportunityBoosts } = require('../depthChart')
 const { computeRecommendationScore } = require('../recommendation');
 const { proTeamIdToAbbreviation } = require('../positions');
 const { findAddDropSuggestions, MIN_UPGRADE } = require('../addDropFinder');
-const { computeTeamPositionStrength } = require('../positionStrength');
-const { findComplementaryTrades } = require('../tradeFinder');
+const { loadTradeValues, ATTRIBUTION_URL } = require('../fantasyCalc');
+const { attachTradeValues, findValueTrades } = require('../tradeEngine');
 const config = require('../config');
 
 function parseArgs(argv) {
@@ -146,37 +146,39 @@ async function main() {
   }
 
   // --- 3. Trade ideas ---
-  const rosters = await getAllTeamRosters({ seasonId: config.seasonId, scoringPeriodId });
-  const strength = computeTeamPositionStrength({
-    teams: rosters,
-    lineupPositionCount: league.rosterSettings.lineupPositionCount
-  });
-  const { complementary, upgradeOnly } = findComplementaryTrades({
+  const [rawRosters, { byEspnId }] = await Promise.all([
+    getAllTeamRosters({ seasonId: config.seasonId, scoringPeriodId }),
+    loadTradeValues(config.seasonId)
+  ]);
+  const { trades } = findValueTrades({
     myTeamId: myTeam.id,
-    teamStrengths: strength,
+    teams: attachTradeValues(rawRosters, byEspnId),
+    lineupPositionCount: league.rosterSettings.lineupPositionCount,
     teamNames
   });
   // Don't suggest trading away a player this same digest just told you to
   // drop for a waiver upgrade — the two recommendations would contradict
   // each other.
   const droppedPlayerIds = new Set(addDrops.map((d) => d.drop.id));
-  const topTrades = [...complementary, ...upgradeOnly]
-    .filter((t) => !droppedPlayerIds.has(t.give.player.id))
-    .slice(0, 2);
+  const topTrades = trades.filter((t) => !t.give.some((p) => droppedPlayerIds.has(p.id))).slice(0, 2);
+
+  const formatPackage = (players) => players.map((p) => `${p.name} (${p.position})`).join(' + ');
 
   console.log('=== 3. Trade ideas ===\n');
   if (topTrades.length === 0) {
-    console.log('No clear trade upgrades found this week. See `npm run trades` for the full breakdown.\n');
+    console.log('No fair-value trades that improve your team right now. See `npm run trades` for the full breakdown.\n');
   } else {
     console.table(
       topTrades.map((t) => ({
-        fit: t.tier === 'complementary' ? 'mutual need' : 'upgrade only',
+        fit: t.tier === 'mutual' ? 'both improve' : 'even value',
         'trade with': t.withTeamName,
-        'you give': `${t.give.player.name} (${t.give.position}, ${t.give.player.seasonAverage.toFixed(1)} avg)`,
-        'you get': `${t.get.player.name} (${t.get.position}, ${t.get.player.seasonAverage.toFixed(1)} avg)`,
-        'proj upgrade': `+${t.upgrade.toFixed(1)}`
+        'you give': formatPackage(t.give),
+        'you get': formatPackage(t.get),
+        'your team': `+${Math.round(t.myGain)}`,
+        'their team': `${Math.round(t.partnerGain) > 0 ? '+' : ''}${Math.round(t.partnerGain)}`
       }))
     );
+    console.log(`Trade values from FantasyCalc.com (${ATTRIBUTION_URL}).`);
     console.log('Run `npm run trades` for the full trade breakdown, watch list, and handcuff chips.\n');
   }
 }

@@ -3,12 +3,14 @@
 // week-to-week, so a "strength" ranking there wouldn't be actionable.
 const TRADE_POSITIONS = ['QB', 'RB', 'WR', 'TE'];
 
-// A team's "starter value" at a position is the sum of season-per-game
-// average points (not season total, so teams with more games played aren't
-// unfairly advantaged) across its best N players there, where N is the
-// league's actual starting slot count for that position. Anything beyond
-// that is "surplus" — bench depth that isn't needed to fill the starting
-// lineup and so is realistically available to trade.
+// A team's "starter value" at a position is the sum of FantasyCalc
+// rest-of-season trade value (see src/fantasyCalc.js — players must already
+// have `tradeValue` attached) across its best N players there, where N is
+// the league's starting slot count for that position. Trade value is used
+// rather than season-to-date points because it's forward-looking and isn't
+// skewed by one big game in a small sample. Anything beyond N is "surplus" —
+// depth not needed to fill the starting lineup, realistically available to
+// trade.
 function computeTeamPositionStrength({ teams, lineupPositionCount }) {
   const startersNeeded = Object.fromEntries(TRADE_POSITIONS.map((pos) => [pos, lineupPositionCount[pos] ?? 0]));
 
@@ -18,9 +20,7 @@ function computeTeamPositionStrength({ teams, lineupPositionCount }) {
     const positions = {};
 
     TRADE_POSITIONS.forEach((pos) => {
-      const players = roster
-        .filter((p) => p.position === pos)
-        .sort((a, b) => b.seasonAverage - a.seasonAverage);
+      const players = roster.filter((p) => p.position === pos).sort((a, b) => b.tradeValue - a.tradeValue);
 
       const starters = players.slice(0, startersNeeded[pos]);
       const surplus = players.slice(startersNeeded[pos]);
@@ -28,7 +28,7 @@ function computeTeamPositionStrength({ teams, lineupPositionCount }) {
       positions[pos] = {
         starters,
         surplus,
-        starterValue: starters.reduce((sum, p) => sum + p.seasonAverage, 0)
+        starterValue: starters.reduce((sum, p) => sum + p.tradeValue, 0)
       };
     });
 

@@ -3,6 +3,7 @@
 CLI tools and a small local web UI for analyzing an ESPN fantasy football
 league, built on top of
 [espn-fantasy-football-api](https://github.com/mkreiser/ESPN-Fantasy-Football-API).
+Player trade values come from [FantasyCalc.com](https://fantasycalc.com).
 
 ## Setup
 
@@ -31,7 +32,10 @@ Then open http://localhost:3000. The home page links to:
 
 - **Curated Suggestions** — the same digest as `curated`, with a week
   selector.
-- **My Team** — your current roster with OPRK and lock status per player.
+- **My Team** — your current roster with OPRK and lock status per player,
+  plus **My Starters Position Strength**: how your actual starters at each
+  position (QB, RB, WR, TE, FLEX, D/ST, K) rank against every other team's
+  starters, by projected, per-game average, or total points.
 - **Lineup Optimizer** — the same exact-optimum lineup solver as
   `startsit`, with a week selector.
 - **Waiver Wire Recommendations** — the same ranked free-agent list as
@@ -40,6 +44,24 @@ Then open http://localhost:3000. The home page links to:
   selector.
 
 Set `PORT` in `.env` to run on a different port than the default 3000.
+
+## Data sources
+
+- **ESPN** — rosters, projections, stats, and league settings, via the ESPN
+  Fantasy API.
+- **FantasyCalc** — redraft (rest-of-season) trade values, used by Trade
+  Recommendations and Curated Suggestions
+  ([src/fantasyCalc.js](src/fantasyCalc.js)). Values are fetched for your
+  league's actual format (team count, PPR, 1QB vs superflex), read from ESPN
+  league settings. Players are matched by ESPN player ID, so no name
+  matching is needed. FantasyCalc doesn't value K or D/ST.
+
+  Per FantasyCalc's [API docs](https://fantasycalc.com/api-docs) and
+  [terms](https://fantasycalc.com/terms-of-usage): responses are cached in
+  `.cache/` (gitignored) for 12 hours; only the documented `/values/current`
+  endpoint is called; and every page that shows FantasyCalc data includes a
+  visible "FantasyCalc.com" attribution link. Personal, non-commercial use
+  only.
 
 <details>
 <summary><strong>Scripts</strong></summary>
@@ -158,8 +180,10 @@ to help you decide between two close options, not blended into the math.
 
 ### Trade recommendations
 
-Analyzes your team's positional strength against the rest of the league and
-suggests trades, handcuff chips, and buy-low/sell-high targets.
+Suggests fair trades that improve your team, using FantasyCalc
+trade values (see [Data sources](#data-sources)). Also shows your roster's
+trade values, league-wide position strength, handcuff chips, and
+buy-low/sell-high targets.
 
 ```bash
 npm run trades
@@ -168,10 +192,20 @@ npm run trades
 Options:
 
 ```bash
-node src/scripts/tradeRecommendations.js --week=4 --team=nifty
+node src/scripts/tradeRecommendations.js --week=4 --team=nifty --give=pollard,addison --get="ja'marr,burrow"
 ```
 
 - `--week` — scoring period to evaluate (defaults to the current week).
+- `--give` — shop specific players: a comma-separated list of
+  case-insensitive name substrings from your roster (each must match exactly
+  one player). Only offers built around those players are suggested (1-for-1
+  or 1-for-2 for each, or 2-for-1 when you give two or more). The web page
+  has the same option as a row of checkboxes above Suggested Trades.
+- `--get` — target specific players on other teams: a comma-separated list
+  of case-insensitive name substrings (each must match exactly one player).
+  Every offer brings back at least one target. Combine with `--give` to ask
+  "what would these players of mine get me toward that one?" The web page
+  has the same option as a search box with autocomplete.
 - `--team` — which team's detailed position-strength breakdown to show
   (defaults to yours). Accepts a team id or a case-insensitive substring of
   the team name, e.g. `--team=nifty` for "Neylan's Nifty Team". Useful for
@@ -182,34 +216,72 @@ node src/scripts/tradeRecommendations.js --week=4 --team=nifty
 
 What it shows:
 
+- **Suggested Trades** ([src/tradeEngine.js](src/tradeEngine.js)) — searches
+  every 1-for-1, 2-for-1, and 1-for-2 trade with every other team (QB/RB/WR/TE
+  worth at least 500), and keeps only trades that pass three checks:
+  1. **Fair value** — both sides are within 10% on FantasyCalc value, so it
+     isn't a lowball. In a 2-for-1, the second player counts at 85% of their
+     value: getting the single best player in a deal is worth a premium,
+     since two mid players take two roster spots and can't both fill the one
+     lineup slot a star does.
+  2. **Improves your team** — your team value gains at least 300. Team value
+     is your best possible starting lineup (QB, 2 RB, 2 WR, TE, FLEX, filled
+     by trade value) plus partial credit for bench depth: your best healthy
+     bench RB/WR/TE counts at 50% of their value and the next at 25%. Depth
+     covers byes and injuries, so it's worth something, but much less than a
+     starter. Players on IR or ruled OUT get no depth credit, because they
+     can't cover anyone. Since the trade is even on total value, it helps you
+     when you turn value sitting on your bench into starter quality where
+     you're thin.
+  3. **Doesn't wreck theirs** — their team value loses no more than 300.
+     Managers protect their starters, so a trade that's fair on paper but
+     guts their lineup won't get accepted. Because depth counts, a team whose
+     backups are all hurt can still come out ahead in a 2-for-1 that gives
+     them two healthy bodies, even if they give up the best player in the
+     deal.
+
+  Results come in two tiers: **both teams improve** (your surplus fills one
+  of their holes, so they're most likely to accept) and **even value** (fair,
+  and their team barely changes). Each row shows which side has the value
+  edge and how much each team's value changes. To avoid near-duplicates, each
+  target player appears once per partner, with at most 2 suggestions per
+  partner. Trades that are 10-20% apart show separately as **Near-Miss
+  Trades**. Overpays (you give the extra value) are listed first, because
+  they can be sent as-is and should be easy to get accepted. Where you'd get
+  the extra value, expect to add a throw-in.
+
+  **Shopping specific players** (`--give`, or the checkboxes on the web
+  page): only the players you pick are offered, and check 2 relaxes from
+  "must improve your team by 300" to "can't cost your team more than 300". Moving a chosen player for fair value is the point, so a sideways
+  trade still counts. Results then show which teams would take that player
+  at fair value and what you'd get back.
+
+  **Targeting other teams' players** (`--get`, or the search box): only
+  the teams that own your targets are searched, and every offer brings back
+  at least one target, on its own or with a second player from that team.
+  Check 2 relaxes the same way as shopping. Check 3 also relaxes: an offer
+  that's a fair price but costs their team more than 300 is kept as a
+  **long shot** (ranked last) instead of being hidden, because when you're
+  after a specific player, knowing the fair price is useful even if they'd
+  probably say no. Up to 5 offers are shown per target.
+
+  Team value is measured in rest-of-season trade value, not weekly
+  projections, so the engine may suggest moving a starter when the drop-off
+  to your backup is small. In a 1QB league, for example, QB12 and QB19 are
+  valued close together. For the same reason, a single bye week doesn't make
+  a team look needier.
+- **Your Trade Values** — every QB/RB/WR/TE on your roster with their
+  FantasyCalc value, position rank, and 30-day value trend. "Starter" means
+  part of your best lineup by value, regardless of how your ESPN lineup is
+  set. A bench player worth 1,000+ is flagged as a **trade chip**: value
+  you aren't using.
 - **League Position Strength** ([src/positionStrength.js](src/positionStrength.js))
-  — every team's rank at each of QB/RB/WR/TE (K/D-ST excluded — rarely
-  trade currency), in one grid, color-coded like OPRK. A team's "starter
-  value" at a position is the season-per-game average across its best
-  players there, up to the league's actual starting slot count for that
-  position; anyone beyond that is "surplus" — tradeable depth not needed to
-  fill the starting lineup. Below the grid, a detail table breaks down any
-  one team's starters/surplus per position — defaults to yours, switch it
-  with the team selector to scout a potential trade partner.
-- **Suggested Trades** ([src/tradeFinder.js](src/tradeFinder.js)) — offers
-  your best surplus player at a strong position for another team's best
-  surplus player at any position ranked below your league's median (not
-  just the strict bottom-third "WEAK" bucket — in a 10-team league that'd
-  only cover ranks 8-10, so a rank-7 position with real room to improve
-  would otherwise never be considered), but only when it's a real upgrade
-  over what you're currently starting there. Two tiers: **mutual
-  need** (they're also weak where you're strong — likely to say yes) and
-  **upgrade only** (they have the depth to spare it, but may not want your
-  side as much). With a small league, requiring both sides' needs to align
-  is often too strict to find anything, hence the second, less-certain
-  tier. Every suggestion also has to be a *realistic* offer — the player
-  you'd receive can't be worth more than 1.5x the player you're giving up
-  (by season-per-game average), so it won't propose trading a bench WR for
-  a top-5 QB. If nothing clears both bars, it correctly says so rather than
-  manufacturing a lowball offer no one would accept. Trades between 1.5x
-  and 2.5x show separately under **Near-Miss Trades** — not realistic
-  enough to recommend outright, but worth a speculative offer or a sense of
-  how big a throw-in you'd need to make one work.
+  — every team's rank at QB/RB/WR/TE, in one grid, color-coded like OPRK. A
+  team's "starter value" at a position is the combined trade value of its
+  best players there, up to the league's starting slot count for that
+  position; anyone beyond that is "surplus". Below the grid, a detail table
+  breaks down any one team's starters and surplus per position. It defaults
+  to yours; switch it with the team selector to scout a trade partner.
 - **Handcuff Trade Chips** ([src/handcuffs.js](src/handcuffs.js)) — RBs on
   your roster that are a clear backup (not just a committee partner — the
   starter has to be meaningfully better ranked) to a starter owned by
@@ -235,11 +307,12 @@ What it shows:
   players whose schedule is about to get easier — a much stronger signal
   than either fact alone.
 
-All of this is driven by season-per-game averages, which are genuinely
-noisy this early in a season — one big game can swing a position's
-"strength" or a player's "gap" a lot. Treat it as a starting point for your
-own judgment, not a final answer, and it gets more reliable as more games
-are played.
+Suggested trades, trade values, and position strength use FantasyCalc's
+forward-looking values. Sell High / Buy Low and the Watch List still use
+season-to-date per-game averages, which are noisy early in a season (one big
+game can swing a player's "gap" a lot) and get more reliable as more games
+are played. Treat all of it as a starting point for your own judgment, not a
+final answer.
 
 ### Curated suggestions
 
@@ -284,9 +357,14 @@ What it shows, in order:
    views instead. Anything within 0.5 pts of the bar (up to 3 per position)
    is shown separately under **Near Misses** — a real but modest edge, left
    for your own judgment rather than silently discarded.
-3. **Top 1-2 trade ideas** — the best of `trades`' suggested trades.
+3. **Top 1-2 trade ideas** — the best of `trades`' FantasyCalc-based
+   suggested trades, with how much each one changes your team value and your
+   trade partner's.
 
 The digest keeps itself internally consistent: if step 2 suggests dropping
-a player, step 3 won't also suggest trading that same player away.
+a player, step 3 won't suggest trading that same player away. It doesn't
+check combined effects across steps, though. For example, a waiver drop at
+QB plus a trade that sends away your other QB could leave you with a single
+QB, so read the moves together before making them all.
 
 </details>

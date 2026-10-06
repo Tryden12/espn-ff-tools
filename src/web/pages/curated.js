@@ -8,10 +8,10 @@ const { getLeagueWidePlayers, findOpportunityBoosts } = require('../../depthChar
 const { computeRecommendationScore } = require('../../recommendation');
 const { proTeamIdToAbbreviation } = require('../../positions');
 const { findAddDropSuggestions, MIN_UPGRADE } = require('../../addDropFinder');
-const { computeTeamPositionStrength } = require('../../positionStrength');
-const { findComplementaryTrades } = require('../../tradeFinder');
+const { loadTradeValues } = require('../../fantasyCalc');
+const { attachTradeValues, findValueTrades } = require('../../tradeEngine');
 const config = require('../../config');
-const { renderLayout, escapeHtml, oprkClass } = require('../layout');
+const { renderLayout, escapeHtml, oprkClass, fantasyCalcAttribution } = require('../layout');
 
 function renderOprkCell(proTeamId, positionId, getOpponentRank) {
   const matchup = getOpponentRank({ proTeamId, positionId });
@@ -146,42 +146,56 @@ async function renderCuratedPage({ week } = {}) {
       <p class="muted">Shown for your own judgment call — not clear enough upgrades to recommend outright.</p>`);
 
   // --- 3. Trade ideas ---
-  const rosters = await getAllTeamRosters({ seasonId: config.seasonId, scoringPeriodId });
-  const strength = computeTeamPositionStrength({
-    teams: rosters,
-    lineupPositionCount: league.rosterSettings.lineupPositionCount
-  });
-  const { complementary, upgradeOnly } = findComplementaryTrades({
+  const [rawRosters, { byEspnId }] = await Promise.all([
+    getAllTeamRosters({ seasonId: config.seasonId, scoringPeriodId }),
+    loadTradeValues(config.seasonId)
+  ]);
+  const { trades } = findValueTrades({
     myTeamId: myTeam.id,
-    teamStrengths: strength,
+    teams: attachTradeValues(rawRosters, byEspnId),
+    lineupPositionCount: league.rosterSettings.lineupPositionCount,
     teamNames
   });
   // Don't suggest trading away a player this same digest just told you to
   // drop for a waiver upgrade — the two recommendations would contradict.
   const droppedPlayerIds = new Set(addDrops.map((d) => d.drop.id));
-  const topTrades = [...complementary, ...upgradeOnly].filter((t) => !droppedPlayerIds.has(t.give.player.id)).slice(0, 2);
+  const topTrades = trades.filter((t) => !t.give.some((p) => droppedPlayerIds.has(p.id))).slice(0, 2);
+
+  const formatPackage = (players) =>
+    players.map((p) => `${escapeHtml(p.name)} <span class="muted">(${p.position})</span>`).join('<br/>');
+  const formatSigned = (value) => {
+    const rounded = Math.round(value);
+    if (rounded === 0) return '0';
+    return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toLocaleString('en-US')}`;
+  };
 
   const tradeHtml =
     topTrades.length === 0
-      ? '<p>No clear trade upgrades found this week. See the <a href="/trades">Trade Recommendations</a> page for the full breakdown.</p>'
+      ? '<p>No fair-value trades that improve your team right now. See the <a href="/trades">Trade Recommendations</a> page for the full breakdown.</p>'
       : `
       <table>
-        <thead><tr><th>Fit</th><th>Trade With</th><th>You Give</th><th>You Get</th><th>Proj Upgrade</th></tr></thead>
+        <thead><tr><th>Fit</th><th>Trade With</th><th>You Give</th><th>You Get</th><th>Your Team</th><th>Their Team</th></tr></thead>
         <tbody>
           ${topTrades
             .map(
               (t) => `<tr>
-            <td>${t.tier === 'complementary' ? '<span class="pill boost">mutual need</span>' : '<span class="pill">upgrade only</span>'}</td>
+            <td>${t.tier === 'mutual' ? '<span class="pill boost">both teams improve</span>' : '<span class="pill">even value</span>'}</td>
             <td>${escapeHtml(t.withTeamName)}</td>
-            <td>${escapeHtml(t.give.player.name)} (${t.give.position}, ${t.give.player.seasonAverage.toFixed(1)} avg)</td>
-            <td>${escapeHtml(t.get.player.name)} (${t.get.position}, ${t.get.player.seasonAverage.toFixed(1)} avg)</td>
-            <td>+${t.upgrade.toFixed(1)}</td>
+            <td>${formatPackage(t.give)}</td>
+            <td>${formatPackage(t.get)}</td>
+            <td><span class="oprk-easy">${formatSigned(t.myGain)}</span></td>
+            <td>${formatSigned(t.partnerGain)}</td>
           </tr>`
             )
             .join('')}
         </tbody>
       </table>
-      <p class="muted">See the <a href="/trades">Trade Recommendations</a> page for the full breakdown, watch list, and handcuff chips.</p>`;
+      <p class="muted">
+        Fair on FantasyCalc market value, and improves your team. Team columns = change in each team's best
+        starting lineup value plus partial credit for healthy bench depth. See the <a href="/trades">Trade Recommendations</a> page for the full
+        breakdown, watch list, and handcuff chips.
+      </p>
+      ${fantasyCalcAttribution()}`;
 
   const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1)
     .map((w) => `<option value="${w}"${w === scoringPeriodId ? ' selected' : ''}>${w}</option>`)
